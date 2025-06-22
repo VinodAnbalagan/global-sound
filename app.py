@@ -1,14 +1,16 @@
 # app.py
+# app.py (Final for Upload-Only Workflow)
+
 import gradio as gr
 import os
 import tempfile
-# from pytube import YouTube 
-import yt_dlp # <-- ADDED
 import time
 import shutil
-import re # for parsing progress
 
-# Importing all custom modules from src/
+# --- NO NETWORKING CODE NEEDED ---
+# All video data now comes from a direct user upload.
+
+# Importing custom modules
 from src.audio_processor import AudioProcessor
 from src.transcriber import Transcriber
 from src.translator import Translator
@@ -32,7 +34,7 @@ def get_usage_count():
     with open(COUNTER_FILE, "r") as f:
         try:
             return int(f.read().strip())
-        except ValueError:
+        except (ValueError, TypeError):
             return 0
 
 def increment_usage_count():
@@ -41,55 +43,20 @@ def increment_usage_count():
         f.write(str(count))
     return count
 
-# --- HELPER FUNCTION FOR YOUTUBE (REPLACED WITH YT-DLP) ---
-def download_youtube_video(url, progress_callback):
-    """Downloads a YouTube video using yt-dlp to a temporary directory and returns the path."""
-    temp_dir = tempfile.mkdtemp()
-    
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-        'progress_hooks': [progress_callback],
-        'nocheckcertificate': True, # <--- THIS IS THE FIX. Make sure it's here.
-    }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        # After download, the 'requested_downloads' key contains file info
-        downloaded_file_path = ydl.prepare_filename(info_dict)
-
-    print(f"Download complete. Video saved to: {downloaded_file_path}")
-    return downloaded_file_path, temp_dir
-
-
-# --- 2. MAIN PROCESSING FUNCTION ---
-def generate_subtitles_for_video(youtube_url, apply_noise_reduction, target_language, preserve_technical_terms, quick_process, progress=gr.Progress()):
+# --- MAIN PROCESSING FUNCTION (SIMPLIFIED FOR UPLOAD) ---
+def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, target_language, preserve_technical_terms, quick_process, progress=gr.Progress()):
     """
-    The full pipeline, now using yt-dlp for robust YouTube downloading.
+    The full pipeline, now simplified to only handle a direct video file upload.
     """
-    if not youtube_url:
-        raise gr.Error("You must provide a YouTube URL.")
+    if not video_upload_path:
+        raise gr.Error("You must upload a video file.")
 
+    # The uploaded file is already a local path, so we can use it directly.
+    video_path = video_upload_path
     temp_files_to_clean = []
 
     try:
-        # Stage 0: Download YouTube Video
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                # Extract percentage from a string like ' 50.6%'
-                percent_str = d.get('_percent_str', '0.0%').strip().replace('%', '')
-                try:
-                    percent = float(percent_str)
-                    # We only care about the download part of the progress bar
-                    progress(percent / 100, desc=f"Downloading YouTube video... {int(percent)}%")
-                except ValueError:
-                    pass # Ignore if conversion fails
-            elif d['status'] == 'finished':
-                progress(1.0, desc="Download complete. Preparing audio...")
-
-        video_path, temp_dir = download_youtube_video(youtube_url, progress_hook)
-        temp_files_to_clean.append(temp_dir) # Clean up the entire directory later
-
         duration_limit = 60 if quick_process else None
         if quick_process:
             print("Quick Process Mode enabled: processing first 60 seconds only.")
@@ -127,30 +94,31 @@ def generate_subtitles_for_video(youtube_url, apply_noise_reduction, target_lang
         usage_count = increment_usage_count()
         usage_html = f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {usage_count}</div>"
 
+        # Return the original uploaded video path to display it in the player
         return gr.Video(value=video_path, subtitles=final_video_subtitle_path), output_files, summary, preview_text, usage_html
 
     except Exception as e:
-        print(f"An error occurred: {e}")
-        raise gr.Error(f"An error occurred during processing. Please check the URL and try again. Details: {e}")
+        print(f"An error occurred in the main pipeline: {e}")
+        raise gr.Error(str(e))
     finally:
-        # Final cleanup
+        # We don't need to clean the original upload path, Gradio handles it.
+        # But we do need to clean our generated audio file.
         for path in temp_files_to_clean:
             if os.path.isfile(path):
-                try:
-                    os.remove(path)
-                except OSError as e_os:
-                    print(f"Error removing file {path}: {e_os}")
-            elif os.path.isdir(path):
-                try:
-                    shutil.rmtree(path)
-                except OSError as e_os:
-                    print(f"Error removing directory {path}: {e_os}")
+                try: os.remove(path)
+                except OSError as e_os: print(f"Error removing file {path}: {e_os}")
 
 
-# --- 3. BUILD THE GRADIO UI (No changes needed here) ---
+# --- GRADIO UI (SIMPLIFIED FOR UPLOAD) ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css") as demo:
     gr.Markdown("# Global Sound — AI-Powered Video Translator")
-    gr.Markdown("Translate any YouTube video into multiple languages. **The translated video will play directly in the results panel.**")
+    gr.Markdown(
+        "**This app now works with direct video uploads to ensure reliability on the free platform.**\n\n"
+        "**How to Use:**\n"
+        "1. First, download a YouTube video to your computer. You can use a free online service for this.\n"
+        "2. Upload the downloaded video file (`.mp4`, `.mov`, etc.) below.\n"
+        "3. Select your options and click 'Generate Subtitles'."
+    )
     
     gr.Markdown(
         "<div style='text-align:center; padding: 10px; border-radius: 5px; background-color: #fef4e6; color: #b45309;'>"
@@ -162,14 +130,10 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
     with gr.Row(equal_height=True):
         # --- LEFT COLUMN for INPUTS ---
         with gr.Column(scale=2):
-            gr.Markdown("### 1. Enter YouTube URL")
-            youtube_url_input = gr.Textbox(
-                label="YouTube Video URL", 
-                placeholder="e.g., https://www.youtube.com/watch?v=...",
-                info="Paste the link to the YouTube video you want to translate."
-            )
+            gr.Markdown("### 1. Upload Your Video File")
+            video_upload_input = gr.Video(label="Upload Video", sources=['upload'])
 
-            gr.Markdown("### 2. Select Options")
+            gr.Markdown("### 2. Select Processing Options")
             with gr.Accordion("Settings", open=True):
                 quick_process_checkbox = gr.Checkbox(label="Quick Process (First 60s Only)", value=True, info="Ideal for testing or a fast preview.")
                 noise_reduction = gr.Checkbox(label="Apply Noise Reduction", value=True, info="Recommended for videos with background noise.")
@@ -180,10 +144,10 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
                 info="Select a language to translate the subtitles into.",
                 choices=[
                     ("Spanish", "es"), ("French", "fr"), ("German", "de"), ("Japanese", "ja"), ("Vietnamese", "vi"), 
-                    ("Chinese", "zh"), ("Hindi", "hi"), ("Portuguese", "pt"), ("Korean", "ko"), ("Tamil", "ta"), ("Ukrainian", "uk"),
-                    ("Russian", "ru"), ("Arabic", "ar")
+                    ("Chinese", "zh"), ("Hindi", "hi"), ("Portuguese", "pt"), ("Korean", "ko"), ("Tamil", "ta"), 
+                    ("Ukrainian", "uk"), ("Russian", "ru"), ("Arabic", "ar")
                 ],
-                value="es" # Default to Spanish
+                value="es" 
             )
             
             with gr.Row():
@@ -199,10 +163,10 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
             usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
 
-    # --- BUTTON CLICK EVENTS ---
+    # --- BUTTON CLICK EVENT (UPDATED INPUTS) ---
     process_event = process_btn.click(
         fn=generate_subtitles_for_video,
-        inputs=[youtube_url_input, noise_reduction, language_dropdown, preserve_technical, quick_process_checkbox],
+        inputs=[video_upload_input, noise_reduction, language_dropdown, preserve_technical, quick_process_checkbox],
         outputs=[video_output, output_files, summary_output, preview_output, usage_counter]
     )
 
@@ -211,6 +175,5 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
     gr.Markdown("---")
     gr.Markdown("Made by Outlier contributors using OpenAI Whisper, mBART, and Gradio.")
 
-# --- 4. LAUNCH THE APP ---
 if __name__ == "__main__":
     demo.launch(debug=True)
