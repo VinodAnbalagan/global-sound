@@ -57,6 +57,8 @@ To run this application on your own machine, follow these steps.
 git clone https://github.com/VinodAnbalagan/global-sound.git
 cd global-sound
 
+```
+
 **2. Create and activate a virtual environment:**
 
 ```bash
