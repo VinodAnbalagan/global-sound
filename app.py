@@ -161,7 +161,8 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
         with gr.Column(scale=3):
             gr.Markdown("### Results")
             video_output = gr.Video(label="Translated Video Player") # NEW output component
-            output_files = gr.File(label="Download All Subtitle Files (.srt)", info="Use these files with video players like VLC or for your own YouTube uploads.", file_count="multiple", interactive=False)
+            # NEW, CORRECTED CODE
+            output_files = gr.File(label="Download All Subtitle Files (.srt)", max_files=20, interactive=False)
             summary_output = gr.Textbox(label="Processing Summary", lines=4, interactive=False)
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
             usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
