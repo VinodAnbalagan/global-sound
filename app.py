@@ -2,7 +2,8 @@
 import gradio as gr
 import os
 import tempfile
-import yt_dlp 
+# from pytube import YouTube 
+import yt_dlp # <-- ADDED
 import time
 import shutil
 import re # for parsing progress
@@ -40,7 +41,6 @@ def increment_usage_count():
         f.write(str(count))
     return count
 
-
 # --- HELPER FUNCTION FOR YOUTUBE (REPLACED WITH YT-DLP) ---
 def download_youtube_video(url, progress_callback):
     """Downloads a YouTube video using yt-dlp to a temporary directory and returns the path."""
@@ -50,7 +50,7 @@ def download_youtube_video(url, progress_callback):
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
         'progress_hooks': [progress_callback],
-        'nocheckcertificate': True, # To avoid SSL issues in some environments
+        'nocheckcertificate': True, # <--- THIS IS THE FIX. Make sure it's here.
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
