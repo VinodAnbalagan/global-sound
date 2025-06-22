@@ -11,11 +11,6 @@ Designed for educators, researchers, creators, and accessibility champions.
 
 ---
 
-![Architecture Diagram](assets/architecture_diagram.png)
-_(Hint: Make sure to add the architecture diagram image to `assets/architecture_diagram.png` in your repo)_
-
----
-
 ## ✨ Key Features
 
 - 🎤 **Noise-Resilient Transcription** using OpenAI Whisper and `noisereduce`.
