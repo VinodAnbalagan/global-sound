@@ -35,9 +35,6 @@ To create a robust and functional application, the architecture was pivoted to a
 
 The application uses a modular, multi-stage pipeline to process video files uploaded by the user. The data flows from the user's browser, is processed on the server, and the results are returned to the UI.
 
-![Architecture Diagram](https://raw.githubusercontent.com/VinodAnbalagan/global-sound/main/assets/architecture_diagram.png)
-*(**Note:** This diagram should be updated to reflect the "Upload-Only" workflow.)*
-
 ## 🛠️ Tech Stack
 
 | Layer                 | Technology / Library                                 |
