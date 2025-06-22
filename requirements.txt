@@ -2,7 +2,7 @@
 
 # UI Framework (version is managed by Hugging Face)
 gradio
-pytube 
+
 
 # Core ML/AI Libraries
 openai-whisper
@@ -21,3 +21,6 @@ soundfile==0.12.1
 # Data Science Libraries
 scipy==1.12.0
 numpy==1.26.4
+
+# Install pytube directly from GitHub for the latest fixes
+pytube @ git+https://github.com/pytube/pytube
