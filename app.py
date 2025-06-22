@@ -3,8 +3,10 @@
 import gradio as gr
 import os
 import tempfile
-from pytube import YouTube # NEW IMPORT
-import time # NEW IMPORT
+from pytube import YouTube
+from pytube.cli import on_progress
+import time
+import shutil
 
 # Importing all custom modules from src/
 from src.audio_processor import AudioProcessor
@@ -35,7 +37,7 @@ def increment_usage_count():
     with open(COUNTER_FILE, "w") as f: f.write(str(count))
     return count
 
-# --- NEW: HELPER FUNCTION FOR YOUTUBE (UPDATED) ---
+# --- HELPER FUNCTION FOR YOUTUBE ---
 def download_youtube_video(url):
     """
     Downloads a YouTube video from a URL and returns the local file path.
@@ -43,11 +45,7 @@ def download_youtube_video(url):
     """
     print(f"Downloading YouTube video from URL: {url}")
     try:
-        # --- THIS IS THE KEY CHANGE ---
-        # Using a specific client handle can bypass some of YouTube's restrictions
-        from pytube.cli import on_progress 
         yt = YouTube(url, on_progress_callback=on_progress)
-        
         stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
         if not stream:
             raise gr.Error("No suitable MP4 video stream found. The video might be private, age-restricted, or a live stream.")
@@ -58,14 +56,14 @@ def download_youtube_video(url):
         return video_path
     except Exception as e:
         print(f"Error downloading YouTube video: {e}")
-        # Provide a more specific error message to the user
         raise gr.Error(f"Failed to download the YouTube video. It might be private, age-restricted, or the URL is incorrect. Error: {e}")
 
-# --- 2. COMPLETELY REPLACED MAIN FUNCTION ---
+# --- 2. MAIN FUNCTION - NOW WITH QUICK PROCESS ---
 
-def generate_subtitles_for_video(video_upload_path, youtube_url, apply_noise_reduction, target_languages, preserve_technical_terms, progress=gr.Progress()):
+def generate_subtitles_for_video(video_upload_path, youtube_url, apply_noise_reduction, target_languages, preserve_technical_terms, quick_process, progress=gr.Progress()):
     """
     The full pipeline: handles either a file upload or a YouTube URL.
+    Includes a "quick process" mode to only process the first 60 seconds.
     """
     video_path = ""
     temp_files_to_clean = []
@@ -81,11 +79,17 @@ def generate_subtitles_for_video(video_upload_path, youtube_url, apply_noise_red
         raise gr.Error("You must upload a video file or provide a YouTube URL.")
 
     try:
-        # Stages 1 and 2
+        # NEW: Determine duration limit based on the checkbox
+        duration_limit = 60 if quick_process else None
+        if quick_process:
+            print("Quick Process Mode enabled: processing first 60 seconds only.")
+
+        # Stage 1: Audio Processing (pass the duration limit)
         progress(0.1, desc="Step 1/4: Extracting and cleaning audio...")
-        processed_audio_path = audio_processor.extract_and_process_audio(video_path, apply_noise_reduction)
+        processed_audio_path = audio_processor.extract_and_process_audio(video_path, apply_noise_reduction, duration_limit)
         temp_files_to_clean.append(processed_audio_path)
 
+        # Stage 2: Transcription
         progress(0.3, desc="Step 2/4: Transcribing audio...")
         original_segments, src_lang = transcriber.transcribe_audio(processed_audio_path)
 
@@ -120,7 +124,6 @@ def generate_subtitles_for_video(video_upload_path, youtube_url, apply_noise_red
         usage_count = increment_usage_count()
         usage_html = f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {usage_count}</div>"
 
-        # Return all outputs, including the new video player output
         return gr.Video(value=video_path, subtitles=final_video_subtitle_path), output_files, summary, preview_text, usage_html
 
     except Exception as e:
@@ -129,14 +132,21 @@ def generate_subtitles_for_video(video_upload_path, youtube_url, apply_noise_red
         for path in temp_files_to_clean:
             if os.path.isfile(path): os.remove(path)
             elif os.path.isdir(path):
-                import shutil
                 shutil.rmtree(path)
 
-# --- 3. COMPLETELY REPLACED UI SECTION ---
+# --- 3. BUILD THE UI WITH QUICK PROCESS & STOP BUTTON ---
 
 with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css") as demo:
     gr.Markdown("# Global Sound — AI-Powered Video Translator")
     gr.Markdown("Translate any video by uploading a file or pasting a YouTube URL. **The translated video will play directly in the results panel.**")
+    
+    # --- NEW INFORMATIONAL TEXT ---
+    gr.Markdown(
+        "<div style='text-align:center; padding: 10px; border-radius: 5px; background-color: #fef4e6; color: #b45309;'>"
+        "⚠️ **Note:** This app runs on a free CPU. Processing is most effective for shorter clips (under 10 minutes). "
+        "For longer videos, please use the **'Quick Process'** option for a fast preview."
+        "</div>"
+    )
 
     with gr.Row():
         # --- LEFT COLUMN for INPUTS ---
@@ -150,37 +160,47 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
 
             gr.Markdown("### Processing Options")
             with gr.Accordion("Settings", open=True):
+                # --- NEW: Quick Process Checkbox ---
+                quick_process_checkbox = gr.Checkbox(label="Quick Process (First 60s Only)", value=True, info="Ideal for testing or a fast preview of the quality.")
+                
                 noise_reduction = gr.Checkbox(label="Apply Noise Reduction", value=True, info="Recommended for noisy audio.")
                 preserve_technical = gr.Checkbox(label="Preserve Technical Terms", value=True, info="Protects words like 'GAN' or 'PyTorch'.")
 
             languages = gr.CheckboxGroup(
                 choices=[
-                    ("Spanish", "es"), ("English", "en"), ("French", "fr"), ("German", "de"), ("Japanese", "ja"), ("Vietnamese", "vi"), 
+                    ("Spanish", "es"), ("French", "fr"), ("German", "de"), ("Japanese", "ja"), ("Vietnamese", "vi"), 
                     ("Chinese", "zh"), ("Hindi", "hi"), ("Portuguese", "pt"), ("Korean", "ko"), ("Tamil", "ta"), ("Ukrainian", "uk")
                 ],
                 label="Translate To:",
-                value=["es", "fr", "ta", "uk"]
+                value=["es", "fr"]
             )
-            process_btn = gr.Button("Generate Subtitles", variant="primary")
+            
+            # --- NEW: Stop Button ---
+            with gr.Row():
+                process_btn = gr.Button("Generate Subtitles", variant="primary", scale=3)
+                stop_btn = gr.Button("Stop", variant="stop", scale=1)
 
         # --- RIGHT COLUMN for OUTPUTS ---
         with gr.Column(scale=3):
             gr.Markdown("### Results")
-            video_output = gr.Video(label="Translated Video Player") # NEW output component
+            video_output = gr.Video(label="Translated Video Player")
             output_files = gr.File(label="Download All Subtitle Files (.srt)", file_count="multiple", interactive=False)
             summary_output = gr.Textbox(label="Processing Summary", lines=4, interactive=False)
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
             usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
 
     # --- UPDATED .click() method with NEW inputs and outputs ---
-    process_btn.click(
+    process_event = process_btn.click(
         fn=generate_subtitles_for_video,
-        inputs=[video_upload_input, youtube_url_input, noise_reduction, languages, preserve_technical],
+        inputs=[video_upload_input, youtube_url_input, noise_reduction, languages, preserve_technical, quick_process_checkbox],
         outputs=[video_output, output_files, summary_output, preview_output, usage_counter]
     )
 
+    # --- NEW: Wire the stop button ---
+    stop_btn.click(fn=None, inputs=None, outputs=None, cancels=[process_event])
+
     gr.Markdown("---")
-    gr.Markdown("Made using OpenAI Whisper, mBART, Gradio, and Python")
+    gr.Markdown("Made using OpenAI Whisper, mBART, Gradio, and Python.")
 
 # --- 4. LAUNCH ---
 if __name__ == "__main__":
