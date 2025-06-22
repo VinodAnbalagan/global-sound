@@ -18,8 +18,8 @@ class Translator:
         term_pattern = r'\b([A-Z][a-zA-Z0-9_]+[A-Z]|[A-Z]{2,}|[A-Za-z]+[0-9]+[A-Za-z_]*)\b'
         terms = re.findall(term_pattern, text)
 
-        # --- CORRECTION: The variable name was misspelled as 'placeholder_mapp'. ---
-        placeholder_map = {} # Corrected variable name
+        
+        placeholder_map = {} 
         for i, term in enumerate(set(terms)):
             placeholder = f"__TERM{i}__"
             text = re.sub(r'\b' + re.escape(term) + r'\b', placeholder, text)
