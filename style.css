@@ -1,0 +1,13 @@
+body {
+    background: linear-gradient(135deg, #f7f9fc, #e2ecf8);
+    font-family: 'Inter', sans-serif;
+}
+
+.gradio-container {
+    max-width: 800px;
+    margin: auto;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    background-color: white;
+}
