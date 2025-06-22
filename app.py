@@ -2,9 +2,10 @@
 import gradio as gr
 import os
 import tempfile
-from pytube import YouTube
+import yt_dlp 
 import time
 import shutil
+import re # for parsing progress
 
 # Importing all custom modules from src/
 from src.audio_processor import AudioProcessor
@@ -40,39 +41,54 @@ def increment_usage_count():
     return count
 
 
-# --- HELPER FUNCTION FOR YOUTUBE ---
+# --- HELPER FUNCTION FOR YOUTUBE (REPLACED WITH YT-DLP) ---
 def download_youtube_video(url, progress_callback):
-    """Downloads a YouTube video to a temporary directory and returns the path."""
+    """Downloads a YouTube video using yt-dlp to a temporary directory and returns the path."""
     temp_dir = tempfile.mkdtemp()
-    yt = YouTube(url, on_progress_callback=progress_callback)
-    stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
-    print(f"Downloading '{yt.title}'...")
-    video_path = stream.download(output_path=temp_dir)
-    print(f"Download complete. Video saved to: {video_path}")
-    return video_path
+    
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+        'progress_hooks': [progress_callback],
+        'nocheckcertificate': True, # To avoid SSL issues in some environments
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=True)
+        # After download, the 'requested_downloads' key contains file info
+        downloaded_file_path = ydl.prepare_filename(info_dict)
+
+    print(f"Download complete. Video saved to: {downloaded_file_path}")
+    return downloaded_file_path, temp_dir
 
 
 # --- 2. MAIN PROCESSING FUNCTION ---
 def generate_subtitles_for_video(youtube_url, apply_noise_reduction, target_language, preserve_technical_terms, quick_process, progress=gr.Progress()):
     """
-    The full pipeline, now optimized for YouTube input and a single target language.
+    The full pipeline, now using yt-dlp for robust YouTube downloading.
     """
     if not youtube_url:
         raise gr.Error("You must provide a YouTube URL.")
 
-    video_path = ""
     temp_files_to_clean = []
 
     try:
         # Stage 0: Download YouTube Video
-        def progress_function(stream, chunk, bytes_remaining):
-            total_size = stream.filesize
-            bytes_downloaded = total_size - bytes_remaining
-            percentage = (bytes_downloaded / total_size) * 100
-            progress(percentage / 100, desc=f"Downloading YouTube video... {int(percentage)}%")
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                # Extract percentage from a string like ' 50.6%'
+                percent_str = d.get('_percent_str', '0.0%').strip().replace('%', '')
+                try:
+                    percent = float(percent_str)
+                    # We only care about the download part of the progress bar
+                    progress(percent / 100, desc=f"Downloading YouTube video... {int(percent)}%")
+                except ValueError:
+                    pass # Ignore if conversion fails
+            elif d['status'] == 'finished':
+                progress(1.0, desc="Download complete. Preparing audio...")
 
-        video_path = download_youtube_video(youtube_url, progress_function)
-        temp_files_to_clean.append(os.path.dirname(video_path))
+        video_path, temp_dir = download_youtube_video(youtube_url, progress_hook)
+        temp_files_to_clean.append(temp_dir) # Clean up the entire directory later
 
         duration_limit = 60 if quick_process else None
         if quick_process:
@@ -115,14 +131,23 @@ def generate_subtitles_for_video(youtube_url, apply_noise_reduction, target_lang
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        # Clean up files even if there is an error
-        for path in temp_files_to_clean:
-            if os.path.isfile(path): os.remove(path)
-            elif os.path.isdir(path): shutil.rmtree(path)
         raise gr.Error(f"An error occurred during processing. Please check the URL and try again. Details: {e}")
+    finally:
+        # Final cleanup
+        for path in temp_files_to_clean:
+            if os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except OSError as e_os:
+                    print(f"Error removing file {path}: {e_os}")
+            elif os.path.isdir(path):
+                try:
+                    shutil.rmtree(path)
+                except OSError as e_os:
+                    print(f"Error removing directory {path}: {e_os}")
 
 
-# --- 3. BUILD THE GRADIO UI ---
+# --- 3. BUILD THE GRADIO UI (No changes needed here) ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css") as demo:
     gr.Markdown("# Global Sound — AI-Powered Video Translator")
     gr.Markdown("Translate any YouTube video into multiple languages. **The translated video will play directly in the results panel.**")
@@ -174,7 +199,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
             usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
 
-    # --- BUTTON CLICK EVENTS (CORRECTLY INDENTED) ---
+    # --- BUTTON CLICK EVENTS ---
     process_event = process_btn.click(
         fn=generate_subtitles_for_video,
         inputs=[youtube_url_input, noise_reduction, language_dropdown, preserve_technical, quick_process_checkbox],
