@@ -2,6 +2,7 @@
 
 # UI Framework (version is managed by Hugging Face)
 gradio
+pytube 
 
 # Core ML/AI Libraries
 openai-whisper
