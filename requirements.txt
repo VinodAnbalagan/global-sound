@@ -22,5 +22,5 @@ soundfile==0.12.1
 scipy==1.12.0
 numpy==1.26.4
 
-# Install pytube directly from GitHub for the latest fixes
-pytube @ git+https://github.com/pytube/pytube
+# More robust YouTube downloader
+yt-dlp==2023.12.30
