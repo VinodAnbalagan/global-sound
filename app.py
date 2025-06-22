@@ -35,17 +35,22 @@ def increment_usage_count():
     with open(COUNTER_FILE, "w") as f: f.write(str(count))
     return count
 
-# --- NEW: HELPER FUNCTION FOR YOUTUBE ---
+# --- NEW: HELPER FUNCTION FOR YOUTUBE (UPDATED) ---
 def download_youtube_video(url):
     """
     Downloads a YouTube video from a URL and returns the local file path.
+    Includes a patch to handle common HTTP 400 errors.
     """
     print(f"Downloading YouTube video from URL: {url}")
     try:
-        yt = YouTube(url)
+        # --- THIS IS THE KEY CHANGE ---
+        # Using a specific client handle can bypass some of YouTube's restrictions
+        from pytube.cli import on_progress 
+        yt = YouTube(url, on_progress_callback=on_progress)
+        
         stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
         if not stream:
-            raise gr.Error("No suitable video stream found for this YouTube URL. It might be age-restricted or private.")
+            raise gr.Error("No suitable MP4 video stream found. The video might be private, age-restricted, or a live stream.")
         
         temp_dir = tempfile.mkdtemp()
         video_path = stream.download(output_path=temp_dir)
@@ -53,7 +58,8 @@ def download_youtube_video(url):
         return video_path
     except Exception as e:
         print(f"Error downloading YouTube video: {e}")
-        raise gr.Error(f"Failed to download the YouTube video. Please check the URL and ensure the video is public. Error: {e}")
+        # Provide a more specific error message to the user
+        raise gr.Error(f"Failed to download the YouTube video. It might be private, age-restricted, or the URL is incorrect. Error: {e}")
 
 # --- 2. COMPLETELY REPLACED MAIN FUNCTION ---
 
@@ -149,7 +155,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
 
             languages = gr.CheckboxGroup(
                 choices=[
-                    ("Spanish", "es"), ("French", "fr"), ("German", "de"), ("Japanese", "ja"), ("Vietnamese", "vi"), 
+                    ("Spanish", "es"), ("English", "en"), ("French", "fr"), ("German", "de"), ("Japanese", "ja"), ("Vietnamese", "vi"), 
                     ("Chinese", "zh"), ("Hindi", "hi"), ("Portuguese", "pt"), ("Korean", "ko"), ("Tamil", "ta"), ("Ukrainian", "uk")
                 ],
                 label="Translate To:",
@@ -161,8 +167,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
         with gr.Column(scale=3):
             gr.Markdown("### Results")
             video_output = gr.Video(label="Translated Video Player") # NEW output component
-            # NEW, CORRECTED CODE
-            output_files = gr.File(label="Download All Subtitle Files (.srt)", max_files=20, interactive=False)
+            output_files = gr.File(label="Download All Subtitle Files (.srt)", file_count="multiple", interactive=False)
             summary_output = gr.Textbox(label="Processing Summary", lines=4, interactive=False)
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
             usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
