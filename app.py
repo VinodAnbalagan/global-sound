@@ -1,14 +1,10 @@
-# app.py
-# app.py (Final for Upload-Only Workflow)
+# app.py (Final Version with Correct Tuple Return)
 
 import gradio as gr
 import os
 import tempfile
 import time
 import shutil
-
-# --- NO NETWORKING CODE NEEDED ---
-# All video data now comes from a direct user upload.
 
 # Importing custom modules
 from src.audio_processor import AudioProcessor
@@ -52,7 +48,6 @@ def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, targe
     if not video_upload_path:
         raise gr.Error("You must upload a video file.")
 
-    # The uploaded file is already a local path, so we can use it directly.
     video_path = video_upload_path
     temp_files_to_clean = []
 
@@ -61,27 +56,22 @@ def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, targe
         if quick_process:
             print("Quick Process Mode enabled: processing first 60 seconds only.")
 
-        # Stage 1: Audio Processing
         progress(0.1, desc="Step 1/3: Extracting and cleaning audio...")
         processed_audio_path = audio_processor.extract_and_process_audio(video_path, apply_noise_reduction, duration_limit)
         temp_files_to_clean.append(processed_audio_path)
 
-        # Stage 2: Transcription
         progress(0.3, desc="Step 2/3: Transcribing audio...")
         original_segments, src_lang = transcriber.transcribe_audio(processed_audio_path)
 
-        # Generate Original Subtitle
         original_srt_path = subtitle_generator.create_srt_file(f"subtitles_{src_lang}", original_segments)
         output_files = [original_srt_path]
         final_video_subtitle_path = original_srt_path
         
-        # Stage 3: Translation
         if target_language and target_language != src_lang:
             progress(0.7, desc=f"Step 3/3: Translating to {target_language}...")
             translated_segments = translator.translate_segments(original_segments, src_lang, target_language, preserve_technical_terms)
             translated_srt_path = subtitle_generator.create_srt_file(f"subtitles_{target_language}", translated_segments)
             output_files.append(translated_srt_path)
-            # Set the video player to use the new translated subtitle
             final_video_subtitle_path = translated_srt_path
 
         progress(1.0, desc="Processing complete!")
@@ -94,22 +84,23 @@ def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, targe
         usage_count = increment_usage_count()
         usage_html = f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {usage_count}</div>"
 
-        # Return the original uploaded video path to display it in the player
-        return gr.Video(value=video_path, subtitles=final_video_subtitle_path), output_files, summary, preview_text, usage_html
+        # --- THIS IS THE FINAL FIX ---
+        # We return a TUPLE of (video_path, subtitle_path) for the gr.Video component.
+        video_player_update = (video_path, final_video_subtitle_path)
+        
+        return video_player_update, output_files, summary, preview_text, usage_html
 
     except Exception as e:
         print(f"An error occurred in the main pipeline: {e}")
         raise gr.Error(str(e))
     finally:
-        # We don't need to clean the original upload path, Gradio handles it.
-        # But we do need to clean our generated audio file.
         for path in temp_files_to_clean:
             if os.path.isfile(path):
                 try: os.remove(path)
                 except OSError as e_os: print(f"Error removing file {path}: {e_os}")
 
 
-# --- GRADIO UI (SIMPLIFIED FOR UPLOAD) ---
+# --- GRADIO UI (UNCHANGED) ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css") as demo:
     gr.Markdown("# Global Sound — AI-Powered Video Translator")
     gr.Markdown(
@@ -128,7 +119,6 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
     )
 
     with gr.Row(equal_height=True):
-        # --- LEFT COLUMN for INPUTS ---
         with gr.Column(scale=2):
             gr.Markdown("### 1. Upload Your Video File")
             video_upload_input = gr.Video(label="Upload Video", sources=['upload'])
@@ -154,7 +144,6 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
                 process_btn = gr.Button("Generate Subtitles", variant="primary", scale=3)
                 stop_btn = gr.Button("Stop", variant="stop", scale=1)
 
-        # --- RIGHT COLUMN for OUTPUTS ---
         with gr.Column(scale=3):
             gr.Markdown("### 3. View Results")
             video_output = gr.Video(label="Translated Video Player", interactive=False)
@@ -163,7 +152,6 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
             usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
 
-    # --- BUTTON CLICK EVENT (UPDATED INPUTS) ---
     process_event = process_btn.click(
         fn=generate_subtitles_for_video,
         inputs=[video_upload_input, noise_reduction, language_dropdown, preserve_technical, quick_process_checkbox],
