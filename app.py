@@ -1,5 +1,3 @@
-# app.py (Final Version with Correct Tuple Return)
-
 import gradio as gr
 import os
 import tempfile
@@ -21,7 +19,7 @@ subtitle_generator = SubtitleGenerator()
 print("\nAll models initialized. The application is ready.")
 
 
-# --- USAGE COUNTER ---
+# --- USAGE COUNTER (runs in the background) ---
 COUNTER_FILE = "usage_count.txt"
 
 def get_usage_count():
@@ -40,13 +38,10 @@ def increment_usage_count():
     return count
 
 
-# --- MAIN PROCESSING FUNCTION (SIMPLIFIED FOR UPLOAD) ---
+# --- MAIN PROCESSING FUNCTION ---
 def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, target_language, preserve_technical_terms, quick_process, progress=gr.Progress()):
-    """
-    The full pipeline, now simplified to only handle a direct video file upload.
-    """
     if not video_upload_path:
-        raise gr.Error("You must upload a video file.")
+        raise gr.Error("You must upload a video file to begin.")
 
     video_path = video_upload_path
     temp_files_to_clean = []
@@ -67,8 +62,9 @@ def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, targe
         output_files = [original_srt_path]
         final_video_subtitle_path = original_srt_path
         
+        # This condition correctly handles when target_language is None
         if target_language and target_language != src_lang:
-            progress(0.7, desc=f"Step 3/3: Translating to {target_language}...")
+            progress(0.7, desc=f"Step 3/3: Translating to {target_language.upper()}...")
             translated_segments = translator.translate_segments(original_segments, src_lang, target_language, preserve_technical_terms)
             translated_srt_path = subtitle_generator.create_srt_file(f"subtitles_{target_language}", translated_segments)
             output_files.append(translated_srt_path)
@@ -78,17 +74,16 @@ def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, targe
         summary = (
             f"Processing Complete!\n\n"
             f"Source Language Detected: {src_lang.upper()}\n"
-            f"Translation Language: {target_language.upper() if target_language else 'N/A'}"
+            f"Translation Language: {target_language.upper() if target_language else 'N/A (Transcription only)'}"
         )
         preview_text = "Transcription Preview:\n" + "\n".join([seg['text'] for seg in original_segments[:5]])
-        usage_count = increment_usage_count()
-        usage_html = f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {usage_count}</div>"
+        
+        increment_usage_count() # Counter increments silently
 
-        # --- THIS IS THE FINAL FIX ---
-        # We return a TUPLE of (video_path, subtitle_path) for the gr.Video component.
         video_player_update = (video_path, final_video_subtitle_path)
         
-        return video_player_update, output_files, summary, preview_text, usage_html
+        # Return the 4 values required by the UI outputs
+        return video_player_update, output_files, summary, preview_text
 
     except Exception as e:
         print(f"An error occurred in the main pipeline: {e}")
@@ -100,44 +95,55 @@ def generate_subtitles_for_video(video_upload_path, apply_noise_reduction, targe
                 except OSError as e_os: print(f"Error removing file {path}: {e_os}")
 
 
-# --- GRADIO UI (UNCHANGED) ---
+# --- GRADIO UI ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css") as demo:
     gr.Markdown("# Global Sound — AI-Powered Video Translator")
-    gr.Markdown(
-        "**This app now works with direct video uploads to ensure reliability on the free platform.**\n\n"
-        "**How to Use:**\n"
-        "1. First, download a YouTube video to your computer. You can use a free online service for this.\n"
-        "2. Upload the downloaded video file (`.mp4`, `.mov`, etc.) below.\n"
-        "3. Select your options and click 'Generate Subtitles'."
-    )
     
+    # --- REVISED INSTRUCTIONS ---
+    gr.Markdown(
+        "Translate your videos into different languages or generate a transcription in the original language. "
+        "This tool creates downloadable subtitle files (`.srt`) that you can use anywhere."
+    )
+    gr.Markdown("### How to Use")
+    gr.Markdown(
+        "1. **Upload Video**: Drag and drop or click to upload your video file (`.mp4`, `.mov`, etc.).\n"
+        "2. **Choose Options**: \n"
+        "   - For **translation**, select a target language from the dropdown.\n"
+        "   - For **transcription only**, leave the language set to `No Translation`.\n"
+        "3. **Generate**: Click the **Generate Subtitles** button and wait for the process to complete."
+    )
+
     gr.Markdown(
         "<div style='text-align:center; padding: 10px; border-radius: 5px; background-color: #fef4e6; color: #b45309;'>"
-        "⚠️ **Note:** This app runs on a free CPU. Processing is fastest with the **'Quick Process'** option. "
-        "Full videos may take several minutes."
+        "**Tip:** This app runs on a free CPU. For best results on long videos, enable **'Quick Process'** for a fast preview or process videos in 10-20 minute segments."
         "</div>"
     )
 
+    # --- IMPROVED LANGUAGE DROPDOWN SETUP ---
+    language_choices = [
+        ("Arabic", "ar"), ("Chinese", "zh"), ("English", "en"), ("French", "fr"), 
+        ("German", "de"), ("Hindi", "hi"), ("Japanese", "ja"), ("Korean", "ko"), 
+        ("Portuguese", "pt"), ("Russian", "ru"), ("Spanish", "es"), ("Tamil", "ta"), 
+        ("Ukrainian", "uk"), ("Vietnamese", "vi")
+    ]
+    translation_options = [("No Translation", None)] + sorted(language_choices)
+
+
     with gr.Row(equal_height=True):
         with gr.Column(scale=2):
-            gr.Markdown("### 1. Upload Your Video File")
+            gr.Markdown("### 1. Input & Options")
             video_upload_input = gr.Video(label="Upload Video", sources=['upload'])
 
-            gr.Markdown("### 2. Select Processing Options")
             with gr.Accordion("Settings", open=True):
                 quick_process_checkbox = gr.Checkbox(label="Quick Process (First 60s Only)", value=True, info="Ideal for testing or a fast preview.")
                 noise_reduction = gr.Checkbox(label="Apply Noise Reduction", value=True, info="Recommended for videos with background noise.")
                 preserve_technical = gr.Checkbox(label="Preserve Technical Terms", value=True, info="Protects words like 'GAN' or 'PyTorch' from translation.")
             
             language_dropdown = gr.Dropdown(
-                label="Translate To (Optional)",
-                info="Select a language to translate the subtitles into.",
-                choices=[
-                    ("Spanish", "es"), ("French", "fr"), ("German", "de"), ("Japanese", "ja"), ("Vietnamese", "vi"), 
-                    ("Chinese", "zh"), ("Hindi", "hi"), ("Portuguese", "pt"), ("Korean", "ko"), ("Tamil", "ta"), 
-                    ("Ukrainian", "uk"), ("Russian", "ru"), ("Arabic", "ar")
-                ],
-                value="es" 
+                label="Translate To",
+                info="Select a language for translation or choose 'No Translation'.",
+                choices=translation_options,
+                value=None  # Default to "No Translation"
             )
             
             with gr.Row():
@@ -145,23 +151,22 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
                 stop_btn = gr.Button("Stop", variant="stop", scale=1)
 
         with gr.Column(scale=3):
-            gr.Markdown("### 3. View Results")
-            video_output = gr.Video(label="Translated Video Player", interactive=False)
+            gr.Markdown("### 2. Results")
+            video_output = gr.Video(label="Video with Subtitles", interactive=False)
             output_files = gr.File(label="Download Subtitle Files (.srt)", file_count="multiple", interactive=False)
             summary_output = gr.Textbox(label="Processing Summary", lines=4, interactive=False)
             preview_output = gr.Textbox(label="Transcription Preview", lines=4, interactive=False)
-            usage_counter = gr.HTML(f"<div style='text-align: right; color: #555; font-size: 0.9em;'>📈 Processed Videos: {get_usage_count()}</div>")
 
     process_event = process_btn.click(
         fn=generate_subtitles_for_video,
         inputs=[video_upload_input, noise_reduction, language_dropdown, preserve_technical, quick_process_checkbox],
-        outputs=[video_output, output_files, summary_output, preview_output, usage_counter]
+        outputs=[video_output, output_files, summary_output, preview_output]
     )
 
     stop_btn.click(fn=None, inputs=None, outputs=None, cancels=[process_event])
 
     gr.Markdown("---")
-    gr.Markdown("Made by Outlier contributors using OpenAI Whisper, mBART, and Gradio.")
+    gr.Markdown("Made from contributors using Gemini, OpenAI Whisper, mBART, and Gradio.")
 
 if __name__ == "__main__":
     demo.launch(debug=True)
