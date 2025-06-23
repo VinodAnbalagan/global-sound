@@ -25,6 +25,45 @@ This tool lets you take any video file from your computer and automatically gene
 
 The application uses a modular, multi-stage pipeline to process video files uploaded by the user. The data flows from the user's browser, is processed on the server, and the results are returned to the UI.
 
+```bash
+User's Computer  
+(Client-Side)  
+│  
+├─ User Interface (Browser)  
+│   ├─ User Downloads Video (external) → Locally saved .mp4  
+│   └─ Gradio UI on Hugging Face → User uploads video  
+│  
+└─ Click 'Generate Subtitles' → Web Server/Orchestration  
+    │  
+    ├─ Gradio Event Handler (app.py)  
+    │   └─ Temp Uploaded Video File  
+    │  
+    └─ Core Processing Pipeline:  
+        │  
+        ├─ 1. Audio Extraction & Cleaning:  
+        │   ├─ Extract audio from video  
+        │   ├─ Apply noise reduction (if enabled)  
+        │   └─ Output: Clean .wav audio  
+        │  
+        ├─ 2. Transcription:  
+        │   ├─ Whisper ASR model processes audio  
+        │   ├─ Generate timestamped segments  
+        │   └─ Output: Timestamped Segments (Original)  
+        │  
+        ├─ 3. Translation Decision:  
+        │   └─ Is target language selected?  
+        │       ├─ Yes → 4. Translation  
+        │       │   ├─ mBART model translates segments  
+        │       │   └─ Output: Timestamped Segments (Translated)  
+        │       │  
+        │       └─ No → Skip translation  
+        │  
+        └─ 5. Subtitle Generation:  
+            ├─ Convert segments to .srt format  
+            ├─ Create both original and translated .srt files  
+            └─ Output: Generated .srt files
+```
+
 ## 🛠️ Tech Stack
 
 | Layer                 | Technology / Library                                 |
