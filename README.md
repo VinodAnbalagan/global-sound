@@ -25,11 +25,6 @@ This tool lets you take any video file from your computer and automatically gene
 -   **Technical Term Preservation**: A custom-built feature ensures that acronyms and technical terms (like "GAN", "LSTM", or "PyTorch") are not translated, maintaining context.
 -   **Standard Subtitle Files**: Downloads `.srt` files for all generated languages, compatible with any video player or platform.
 
-## A Note on the Architecture: From URL to Upload
-
-The initial vision for this project was a fully automated workflow using YouTube URLs. However, during deployment to the Hugging Face Spaces free tier, significant network restrictions (SSL/DNS errors) were encountered that blocked the server from reliably downloading videos.
-
-To create a robust and functional application, the architecture was pivoted to a **client-side upload model**. This approach bypasses all server-side network issues and provides a stable experience for every user. This journey highlights a key lesson in software engineering: the best design is one that is resilient and works reliably within the constraints of its target environment.
 
 ## 🏛️ System Architecture
 
