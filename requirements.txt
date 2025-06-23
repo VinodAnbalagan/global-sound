@@ -1,3 +1,5 @@
+# requirements.txt
+
 # requirements.txt (Final for Upload-Only Workflow)
 gradio
 openai-whisper
