@@ -106,7 +106,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Global Sound 🌍", css="style.css
 
     # --- PERFORMANCE WARNING ---
     gr.Markdown(
-        "<div style='text-align:center; padding: 10px; border-radius: 5px; background-color: #f3fa85; color: white;'>"
+        "<div style='text-align:center; padding: 10px; border-radius: 5px; background-color: #fef4e6; color: white;'>"
         "**⚠️ Important Performance Note:** This app runs on a free CPU. For best results, **please use video clips under 15 minutes.** Longer videos will likely cause a connection timeout. Use the 'Quick Process' option for a fast test."
         "</div>"
     )
