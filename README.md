@@ -11,11 +11,6 @@ This tool lets you take any video file from your computer and automatically gene
 
 ---
 
-![App Screenshot](https://raw.githubusercontent.com/VinodAnbalagan/global-sound/main/assets/app_screenshot.png)
-*(**Note:** This screenshot should be updated to show the final "Upload-Only" user interface)*
-
----
-
 ## ✨ Key Features
 
 -   **Direct Video Upload**: A robust workflow where you upload a video file directly from your computer, ensuring reliability on the free cloud platform.
